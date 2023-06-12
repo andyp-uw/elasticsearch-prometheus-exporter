@@ -32,7 +32,6 @@ import org.elasticsearch.action.admin.indices.stats.IndicesStatsResponse;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
 import org.elasticsearch.client.internal.Client;
-import org.elasticsearch.client.internal.Requests;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
@@ -42,7 +41,7 @@ import org.elasticsearch.transport.TransportService;
 
 /**
  * Transport action class for Prometheus Exporter plugin.
- *
+ * <p>
  * It performs several requests within the cluster to gather "cluster health", "nodes stats", "indices stats"
  * and "cluster state" (i.e. cluster settings) info. Some of those requests are optional depending on plugin
  * settings.
@@ -108,10 +107,9 @@ public class TransportNodePrometheusMetricsAction extends HandledTransportAction
             // code comment this is "so it is backward compatible with the transport client behaviour".
             // hence we are explicit about ClusterHealthRequest level and do not rely on defaults.
             // https://www.elastic.co/guide/en/elasticsearch/reference/6.4/cluster-health.html#request-params
-            this.healthRequest = Requests.clusterHealthRequest().local(true);
-            this.healthRequest.level(ClusterHealthRequest.Level.SHARDS);
+            this.healthRequest = new ClusterHealthRequest();
+            this.nodesStatsRequest = new NodesStatsRequest("_local");
 
-            this.nodesStatsRequest = Requests.nodesStatsRequest("_local").clear().all();
 
             // Indices stats request is not "node-specific", it does not support any "_local" notion
             // it is broad-casted to all cluster nodes.
@@ -119,7 +117,7 @@ public class TransportNodePrometheusMetricsAction extends HandledTransportAction
 
             // Cluster settings are get via ClusterStateRequest (see elasticsearch RestClusterGetSettingsAction for details)
             // We prefer to send it to master node (hence local=false; it should be set by default but we want to be sure).
-            this.clusterStateRequest = isPrometheusClusterSettings ? Requests.clusterStateRequest()
+            this.clusterStateRequest = isPrometheusClusterSettings ? new ClusterStateRequest()
                     .clear().metadata(true).local(false) : null;
         }
 
@@ -129,68 +127,68 @@ public class TransportNodePrometheusMetricsAction extends HandledTransportAction
         }
 
         private ActionListener<ClusterStateResponse> clusterStateResponseActionListener =
-            new ActionListener<ClusterStateResponse>() {
-                @Override
-                public void onResponse(ClusterStateResponse response) {
-                    clusterStateResponse = response;
-                    gatherRequests();
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    listener.onFailure(new ElasticsearchException("Cluster state request failed", e));
-                }
-            };
-
-        private ActionListener<IndicesStatsResponse> indicesStatsResponseActionListener =
-            new ActionListener<IndicesStatsResponse>() {
-                @Override
-                public void onResponse(IndicesStatsResponse response) {
-                    indicesStatsResponse = response;
-                    if (isPrometheusClusterSettings) {
-                        client.admin().cluster().state(clusterStateRequest, clusterStateResponseActionListener);
-                    } else {
+                new ActionListener<ClusterStateResponse>() {
+                    @Override
+                    public void onResponse(ClusterStateResponse response) {
+                        clusterStateResponse = response;
                         gatherRequests();
                     }
-                }
 
-                @Override
-                public void onFailure(Exception e) {
-                    listener.onFailure(new ElasticsearchException("Indices stats request failed", e));
-                }
-            };
+                    @Override
+                    public void onFailure(Exception e) {
+                        listener.onFailure(new ElasticsearchException("Cluster state request failed", e));
+                    }
+                };
+
+        private ActionListener<IndicesStatsResponse> indicesStatsResponseActionListener =
+                new ActionListener<IndicesStatsResponse>() {
+                    @Override
+                    public void onResponse(IndicesStatsResponse response) {
+                        indicesStatsResponse = response;
+                        if (isPrometheusClusterSettings) {
+                            client.admin().cluster().state(clusterStateRequest, clusterStateResponseActionListener);
+                        } else {
+                            gatherRequests();
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Exception e) {
+                        listener.onFailure(new ElasticsearchException("Indices stats request failed", e));
+                    }
+                };
 
         private ActionListener<NodesStatsResponse> nodesStatsResponseActionListener =
-            new ActionListener<NodesStatsResponse>() {
-                @Override
-                public void onResponse(NodesStatsResponse nodeStats) {
-                    nodesStatsResponse = nodeStats;
-                    if (isPrometheusIndices) {
-                        client.admin().indices().stats(indicesStatsRequest, indicesStatsResponseActionListener);
-                    } else {
-                        indicesStatsResponseActionListener.onResponse(null);
+                new ActionListener<NodesStatsResponse>() {
+                    @Override
+                    public void onResponse(NodesStatsResponse nodeStats) {
+                        nodesStatsResponse = nodeStats;
+                        if (isPrometheusIndices) {
+                            client.admin().indices().stats(indicesStatsRequest, indicesStatsResponseActionListener);
+                        } else {
+                            indicesStatsResponseActionListener.onResponse(null);
+                        }
                     }
-                }
 
-                @Override
-                public void onFailure(Exception e) {
-                    listener.onFailure(new ElasticsearchException("Nodes stats request failed", e));
-                }
-            };
+                    @Override
+                    public void onFailure(Exception e) {
+                        listener.onFailure(new ElasticsearchException("Nodes stats request failed", e));
+                    }
+                };
 
         private ActionListener<ClusterHealthResponse> clusterHealthResponseActionListener =
-            new ActionListener<ClusterHealthResponse>() {
-                @Override
-                public void onResponse(ClusterHealthResponse response) {
-                    clusterHealthResponse = response;
-                    client.admin().cluster().nodesStats(nodesStatsRequest, nodesStatsResponseActionListener);
-                }
+                new ActionListener<ClusterHealthResponse>() {
+                    @Override
+                    public void onResponse(ClusterHealthResponse response) {
+                        clusterHealthResponse = response;
+                        client.admin().cluster().nodesStats(nodesStatsRequest, nodesStatsResponseActionListener);
+                    }
 
-                @Override
-                public void onFailure(Exception e) {
-                    listener.onFailure(new ElasticsearchException("Cluster health request failed", e));
-                }
-            };
+                    @Override
+                    public void onFailure(Exception e) {
+                        listener.onFailure(new ElasticsearchException("Cluster health request failed", e));
+                    }
+                };
 
         private void start() {
             client.admin().cluster().health(healthRequest, clusterHealthResponseActionListener);

@@ -105,4 +105,4 @@ checkstyle {
     toolVersion = "8.2"
 }
 
-configurations.all { exclude group: 'org.elasticsearch', module: 'elasticsearch-preallocate' }
+//configurations.all { exclude group: 'org.elasticsearch', module: 'elasticsearch-preallocate' }
