@@ -108,7 +108,7 @@ public class TransportNodePrometheusMetricsAction extends HandledTransportAction
             // hence we are explicit about ClusterHealthRequest level and do not rely on defaults.
             // https://www.elastic.co/guide/en/elasticsearch/reference/6.4/cluster-health.html#request-params
             this.healthRequest = new ClusterHealthRequest();
-            this.nodesStatsRequest = new NodesStatsRequest("_local");
+            this.nodesStatsRequest = new NodesStatsRequest();
 
 
             // Indices stats request is not "node-specific", it does not support any "_local" notion
